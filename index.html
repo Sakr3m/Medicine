@@ -32,27 +32,39 @@
     overscroll-behavior: none;
   }
 
-  .carousel{
-    display:flex;
-    overflow-x:auto;
-    overflow-y:hidden;
-    scroll-snap-type: x mandatory;
-    -webkit-overflow-scrolling: touch;
+  .page{
+    max-width: 480px;
+    margin: 0 auto;
     height: 100dvh;
-    scrollbar-width: none;
-  }
-  .carousel::-webkit-scrollbar{ display:none; }
-
-  .day-slide{
-    flex: 0 0 100%;
-    scroll-snap-align: center;
-    height: 100%;
     overflow-y: auto;
     padding: env(safe-area-inset-top,0) 18px 40px 18px;
   }
-  .day-inner{ max-width: 480px; margin: 0 auto; }
 
-  header{ padding: 28px 0 18px 0; }
+  .day-header{
+    display:flex;
+    align-items:flex-start;
+    gap: 8px;
+    padding: 24px 0 18px 0;
+  }
+  .header-center{ flex:1; text-align:center; min-width:0; }
+
+  .nav-btn{
+    flex-shrink:0;
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    border: 2px solid var(--line);
+    background: transparent;
+    color: var(--ink);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    cursor:pointer;
+    margin-top: 4px;
+  }
+  .nav-btn svg{ width:18px; height:18px; }
+  .nav-btn:disabled{ opacity: .25; pointer-events:none; }
+
   .badge-today{
     display:inline-block;
     font-size: 11px;
@@ -74,7 +86,7 @@
     margin: 0 0 4px 0;
   }
   h1{
-    font-size: 24px;
+    font-size: 19px;
     margin: 0;
     font-weight: 700;
     letter-spacing: -0.01em;
@@ -234,7 +246,18 @@
 </head>
 <body>
 
-<div class="carousel" id="carousel"></div>
+<div class="page">
+  <div class="day-header">
+    <button class="nav-btn" id="prevBtn" aria-label="Giorno precedente">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+    </button>
+    <div class="header-center" id="headerCenter"></div>
+    <button class="nav-btn" id="nextBtn" aria-label="Giorno successivo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+    </button>
+  </div>
+  <main id="mainContent"></main>
+</div>
 
 <div class="confirm-overlay" id="confirmOverlay">
   <div class="confirm-box">
@@ -304,121 +327,6 @@ function saveState(key, state){
   catch(e){ console.error("Storage error", e); }
 }
 
-function visibleItemsFor(date){
-  const cycleDay = daysBetween(date, ANTIBIOTIC_START_DATE);
-  const antibioticActive = cycleDay >= 0 && cycleDay < ANTIBIOTIC_DAYS;
-  return { bySection: SCHEDULE, antibioticActive, cycleDay };
-}
-
-function buildSlide(date){
-  const key = dateKey(date);
-  const isToday = key === dateKey(TODAY);
-  let state = loadState(key);
-
-  const slide = document.createElement("div");
-  slide.className = "day-slide";
-  slide.dataset.key = key;
-
-  const inner = document.createElement("div");
-  inner.className = "day-inner";
-  slide.appendChild(inner);
-
-  function render(){
-    const { bySection, antibioticActive, cycleDay } = visibleItemsFor(date);
-    let done = 0, total = 0;
-
-    inner.innerHTML = "";
-
-    const head = document.createElement("header");
-    let badgeHtml = isToday ? '<div class="badge-today">Oggi</div>' : '';
-    head.innerHTML = `
-      ${badgeHtml}
-      <p class="eyebrow">Promemoria del giorno</p>
-      <h1>${formatDate(date)}</h1>
-      <div class="progress">
-        <div class="progress-track"><div class="progress-fill" id="fill-${key}"></div></div>
-        <div class="progress-label" id="label-${key}">0/0</div>
-      </div>
-    `;
-    inner.appendChild(head);
-
-    const main = document.createElement("main");
-
-    function buildRow(item){
-      total++;
-      const isDone = !!state[item.id];
-      if(isDone) done++;
-      const row = document.createElement("div");
-      row.className = "item" + (isDone ? " done" : "");
-      row.innerHTML = `
-        <div class="dot"></div>
-        <div class="item-body">
-          <p class="item-name">${item.name}</p>
-          <div class="item-tag">${item.tag}</div>
-        </div>
-        <button class="btn" aria-label="Segna come fatto">
-          <svg viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-        </button>
-      `;
-      row.addEventListener("click", () => {
-        const currentlyDone = !!state[item.id];
-        if(currentlyDone){
-          askConfirm(item.name, () => {
-            state[item.id] = false;
-            saveState(key, state);
-            render();
-          });
-        } else {
-          state[item.id] = true;
-          saveState(key, state);
-          render();
-        }
-      });
-      return row;
-    }
-
-    if(antibioticActive){
-      const abSection = document.createElement("div");
-      abSection.className = "section";
-      abSection.innerHTML = `<div class="section-title">Antibiotico · giorno ${cycleDay+1} di ${ANTIBIOTIC_DAYS}</div>`;
-      const abCard = document.createElement("div");
-      abCard.className = "card";
-      abCard.appendChild(buildRow(ANTIBIOTIC_ITEM));
-      abSection.appendChild(abCard);
-      main.appendChild(abSection);
-    }
-
-    for(const section in bySection){
-      const items = bySection[section];
-      if(items.length === 0) continue;
-
-      const secDiv = document.createElement("div");
-      secDiv.className = "section";
-      secDiv.innerHTML = `<div class="section-title">${section}</div>`;
-      const card = document.createElement("div");
-      card.className = "card";
-
-      for(const item of items){
-        card.appendChild(buildRow(item));
-      }
-      secDiv.appendChild(card);
-      main.appendChild(secDiv);
-    }
-    if(total === 0){
-      main.innerHTML = '<div class="empty">Nessun farmaco previsto oggi.</div>';
-    }
-    inner.appendChild(main);
-
-    const fillEl = document.getElementById("fill-" + key);
-    const labelEl = document.getElementById("label-" + key);
-    if(fillEl) fillEl.style.width = total ? (done/total*100) + "%" : "0%";
-    if(labelEl) labelEl.textContent = done + "/" + total;
-  }
-
-  render();
-  return slide;
-}
-
 // ---- Popup conferma deselezione ----
 const confirmOverlay = document.getElementById("confirmOverlay");
 const confirmText = document.getElementById("confirmText");
@@ -442,17 +350,113 @@ confirmOk.addEventListener("click", () => {
   closeConfirm();
 });
 
-const carousel = document.getElementById("carousel");
-let todaySlide = null;
-for(let i = -RANGE; i <= RANGE; i++){
-  const date = addDays(TODAY, i);
-  const slide = buildSlide(date);
-  if(i === 0) todaySlide = slide;
-  carousel.appendChild(slide);
+// ---- Navigazione giorno ----
+const headerCenter = document.getElementById("headerCenter");
+const mainContent = document.getElementById("mainContent");
+const prevBtn = document.getElementById("prevBtn");
+const nextBtn = document.getElementById("nextBtn");
+
+let offset = 0;
+
+function render(){
+  const date = addDays(TODAY, offset);
+  const key = dateKey(date);
+  const isToday = offset === 0;
+  let state = loadState(key);
+
+  const cycleDay = daysBetween(date, ANTIBIOTIC_START_DATE);
+  const antibioticActive = cycleDay >= 0 && cycleDay < ANTIBIOTIC_DAYS;
+
+  prevBtn.disabled = offset <= -RANGE;
+  nextBtn.disabled = offset >= RANGE;
+
+  headerCenter.innerHTML = `
+    ${isToday ? '<div class="badge-today">Oggi</div>' : ''}
+    <p class="eyebrow">Promemoria del giorno</p>
+    <h1>${formatDate(date)}</h1>
+    <div class="progress">
+      <div class="progress-track"><div class="progress-fill" id="fill"></div></div>
+      <div class="progress-label" id="label">0/0</div>
+    </div>
+  `;
+
+  mainContent.innerHTML = "";
+  let done = 0, total = 0;
+
+  function buildRow(item){
+    total++;
+    const isDone = !!state[item.id];
+    if(isDone) done++;
+    const row = document.createElement("div");
+    row.className = "item" + (isDone ? " done" : "");
+    row.innerHTML = `
+      <div class="dot"></div>
+      <div class="item-body">
+        <p class="item-name">${item.name}</p>
+        <div class="item-tag">${item.tag}</div>
+      </div>
+      <button class="btn" aria-label="Segna come fatto">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+      </button>
+    `;
+    row.addEventListener("click", () => {
+      const currentlyDone = !!state[item.id];
+      if(currentlyDone){
+        askConfirm(item.name, () => {
+          state[item.id] = false;
+          saveState(key, state);
+          render();
+        });
+      } else {
+        state[item.id] = true;
+        saveState(key, state);
+        render();
+      }
+    });
+    return row;
+  }
+
+  if(antibioticActive){
+    const abSection = document.createElement("div");
+    abSection.className = "section";
+    abSection.innerHTML = `<div class="section-title">Antibiotico · giorno ${cycleDay+1} di ${ANTIBIOTIC_DAYS}</div>`;
+    const abCard = document.createElement("div");
+    abCard.className = "card";
+    abCard.appendChild(buildRow(ANTIBIOTIC_ITEM));
+    abSection.appendChild(abCard);
+    mainContent.appendChild(abSection);
+  }
+
+  for(const section in SCHEDULE){
+    const items = SCHEDULE[section];
+    const secDiv = document.createElement("div");
+    secDiv.className = "section";
+    secDiv.innerHTML = `<div class="section-title">${section}</div>`;
+    const card = document.createElement("div");
+    card.className = "card";
+    for(const item of items){
+      card.appendChild(buildRow(item));
+    }
+    secDiv.appendChild(card);
+    mainContent.appendChild(secDiv);
+  }
+
+  if(total === 0){
+    mainContent.innerHTML = '<div class="empty">Nessun farmaco previsto oggi.</div>';
+  }
+
+  document.getElementById("fill").style.width = total ? (done/total*100) + "%" : "0%";
+  document.getElementById("label").textContent = done + "/" + total;
 }
-if(todaySlide){
-  todaySlide.scrollIntoView({ behavior: "instant", inline: "center" });
-}
+
+prevBtn.addEventListener("click", () => {
+  if(offset > -RANGE){ offset--; render(); }
+});
+nextBtn.addEventListener("click", () => {
+  if(offset < RANGE){ offset++; render(); }
+});
+
+render();
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
