@@ -77,11 +77,17 @@
     padding: 3px 10px;
   }
   .today-slot{
-    height: 0;
-    overflow: visible;
-    text-align:center;
+    height: 26px;
+    position: relative;
   }
-  .today-slot .badge-today{ margin-top: 4px; }
+  .today-slot .badge-today{
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    margin: 0;
+  }
+  main .section:first-child{ margin-top: 0; }
   .eyebrow{
     font-size: 12px;
     letter-spacing: .08em;
