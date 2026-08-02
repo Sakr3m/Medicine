@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<title>Promemoria</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#F4F6F5">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<style>
+  :root{
+    --bg: #F4F6F5;
+    --card: #FFFFFF;
+    --ink: #1E2A28;
+    --ink-soft: #5C6B68;
+    --line: #E3E8E6;
+    --done: #6E9C8C;
+    --done-bg: #EAF2EE;
+    --pending: #2E3B39;
+    --accent: #C97B63;
+  }
+  *{ box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html,body{ height:100%; }
+  body{
+    margin:0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    padding-bottom: 40px;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap{
+    max-width: 480px;
+    margin: 0 auto;
+    padding: env(safe-area-inset-top,0) 18px 0 18px;
+  }
+  header{
+    padding: 28px 0 18px 0;
+  }
+  .eyebrow{
+    font-size: 12px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    font-weight: 600;
+    margin: 0 0 4px 0;
+  }
+  h1{
+    font-size: 26px;
+    margin: 0;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    text-transform: capitalize;
+  }
+  .progress{
+    margin-top: 14px;
+    display:flex;
+    align-items:center;
+    gap: 10px;
+  }
+  .progress-track{
+    flex:1;
+    height: 6px;
+    border-radius: 3px;
+    background: var(--line);
+    overflow:hidden;
+  }
+  .progress-fill{
+    height:100%;
+    background: var(--done);
+    border-radius: 3px;
+    transition: width .35s ease;
+    width:0%;
+  }
+  .progress-label{
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink-soft);
+    min-width: 40px;
+    text-align:right;
+    font-variant-numeric: tabular-nums;
+  }
+  .section{
+    margin-top: 26px;
+  }
+  .section-title{
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: var(--ink-soft);
+    margin-bottom: 10px;
+    padding-left: 2px;
+  }
+  .card{
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    overflow: hidden;
+  }
+  .item{
+    display:flex;
+    align-items:center;
+    gap: 14px;
+    padding: 16px;
+    border-bottom: 1px solid var(--line);
+    background: var(--card);
+    transition: background .2s ease;
+  }
+  .item:last-child{ border-bottom: none; }
+  .item.done{ background: var(--done-bg); }
+  .dot{
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--accent);
+    flex-shrink:0;
+  }
+  .item.done .dot{ background: var(--done); }
+  .item-body{ flex:1; min-width:0; }
+  .item-name{
+    font-size: 16px;
+    font-weight: 600;
+    margin: 0;
+    color: var(--pending);
+  }
+  .item.done .item-name{
+    color: var(--done);
+    text-decoration: line-through;
+    text-decoration-thickness: 1.5px;
+  }
+  .item-tag{
+    font-size: 12.5px;
+    color: var(--ink-soft);
+    margin-top: 2px;
+  }
+  .btn{
+    flex-shrink:0;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    border: 2px solid var(--line);
+    background: transparent;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    cursor:pointer;
+    padding:0;
+  }
+  .btn svg{ width:16px; height:16px; opacity:0; transition: opacity .15s ease; }
+  .item.done .btn{ background: var(--done); border-color: var(--done); }
+  .item.done .btn svg{ opacity:1; stroke: white; }
+  .empty{
+    text-align:center;
+    color: var(--ink-soft);
+    font-size: 14px;
+    padding: 40px 0 10px 0;
+  }
+  footer{
+    margin-top: 34px;
+    text-align:center;
+  }
+  .reset{
+    font-size: 12.5px;
+    color: var(--ink-soft);
+    background:none;
+    border:none;
+    text-decoration: underline;
+    cursor:pointer;
+    padding: 8px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <p class="eyebrow" id="dayCount"></p>
+    <h1 id="dateTitle"></h1>
+    <div class="progress">
+      <div class="progress-track"><div class="progress-fill" id="fill"></div></div>
+      <div class="progress-label" id="progressLabel">0/0</div>
+    </div>
+  </header>
+
+  <main id="sections"></main>
+
+  <footer>
+    <button class="reset" id="resetBtn">Azzera la giornata di oggi</button>
+  </footer>
+</div>
+
+<script>
+// ---- Definizione farmaci ricorrenti ----
+const ANTIBIOTIC_START = "2026-08-02"; // giorno 1 di Cefixoral
+const ANTIBIOTIC_DAYS = 4;
+
+const SCHEDULE = {
+  "Mattina": [
+    { id: "cefixoral", name: "Cefixoral", tag: "Antibiotico", conditional: true },
+    { id: "tareg", name: "Tareg Valsartan", tag: "Pressione" },
+    { id: "forxiga", name: "Forxiga", tag: "Diuretico" },
+    { id: "lasix", name: "Lasix", tag: "Diuretico" },
+  ],
+  "Pranzo": [
+    { id: "spirofur", name: "Spirofur", tag: "Diuretico" },
+    { id: "cardioaspirina", name: "Cardioaspirina", tag: "Cuore" },
+  ],
+  "Sera": [
+    { id: "rosuvastatina", name: "Rosuvastatina", tag: "Statina" },
+    { id: "cardicor", name: "Cardicor Bisoprololo", tag: "Cuore" },
+  ]
+};
+
+// ---- Utility date ----
+function todayKey(){
+  const d = new Date();
+  return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
+}
+function daysSince(dateStr){
+  const start = new Date(dateStr + "T00:00:00");
+  const now = new Date();
+  const a = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const b = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+  return Math.round((a - b) / 86400000);
+}
+
+const TODAY = todayKey();
+const cycleDay = daysSince(ANTIBIOTIC_START); // 0-indexed
+const antibioticActive = cycleDay >= 0 && cycleDay < ANTIBIOTIC_DAYS;
+
+// ---- Storage ----
+function loadState(){
+  try{
+    const raw = localStorage.getItem("promemoria:" + TODAY);
+    return raw ? JSON.parse(raw) : {};
+  }catch(e){ return {}; }
+}
+function saveState(state){
+  try{
+    localStorage.setItem("promemoria:" + TODAY, JSON.stringify(state));
+  }catch(e){ console.error("Storage error", e); }
+}
+
+let state = loadState();
+
+// ---- Render ----
+const dateTitle = document.getElementById("dateTitle");
+const dayCount = document.getElementById("dayCount");
+const sectionsEl = document.getElementById("sections");
+const fillEl = document.getElementById("fill");
+const progressLabel = document.getElementById("progressLabel");
+
+function formatDate(){
+  const d = new Date();
+  const opts = { weekday: "long", day: "numeric", month: "long", year: "numeric" };
+  return d.toLocaleDateString("it-IT", opts);
+}
+
+function visibleItems(){
+  const flat = [];
+  for(const section in SCHEDULE){
+    for(const item of SCHEDULE[section]){
+      if(item.conditional && !antibioticActive) continue;
+      flat.push({ ...item, section });
+    }
+  }
+  return flat;
+}
+
+function render(){
+  dateTitle.textContent = formatDate();
+  if(antibioticActive){
+    dayCount.textContent = "Cefixoral · giorno " + (cycleDay+1) + " di " + ANTIBIOTIC_DAYS;
+  } else {
+    dayCount.textContent = "Promemoria del giorno";
+  }
+
+  sectionsEl.innerHTML = "";
+  const items = visibleItems();
+  let done = 0;
+
+  for(const section in SCHEDULE){
+    const items = SCHEDULE[section].filter(i => !i.conditional || antibioticActive);
+    if(items.length === 0) continue;
+
+    const secDiv = document.createElement("div");
+    secDiv.className = "section";
+    secDiv.innerHTML = `<div class="section-title">${section}</div>`;
+    const card = document.createElement("div");
+    card.className = "card";
+
+    for(const item of items){
+      const isDone = !!state[item.id];
+      if(isDone) done++;
+      const row = document.createElement("div");
+      row.className = "item" + (isDone ? " done" : "");
+      row.innerHTML = `
+        <div class="dot"></div>
+        <div class="item-body">
+          <p class="item-name">${item.name}</p>
+          <div class="item-tag">${item.tag}</div>
+        </div>
+        <button class="btn" aria-label="Segna come fatto">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+        </button>
+      `;
+      row.addEventListener("click", () => toggle(item.id));
+      card.appendChild(row);
+    }
+    secDiv.appendChild(card);
+    sectionsEl.appendChild(secDiv);
+  }
+
+  const total = items.length;
+  progressLabel.textContent = done + "/" + total;
+  fillEl.style.width = total ? (done/total*100) + "%" : "0%";
+
+  if(total === 0){
+    sectionsEl.innerHTML = '<div class="empty">Nessun farmaco previsto oggi.</div>';
+  }
+}
+
+function toggle(id){
+  state[id] = !state[id];
+  saveState(state);
+  render();
+}
+
+document.getElementById("resetBtn").addEventListener("click", () => {
+  state = {};
+  saveState(state);
+  render();
+});
+
+render();
+
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("sw.js").catch(()=>{});
+  });
+}
+</script>
+</body>
+</html>
