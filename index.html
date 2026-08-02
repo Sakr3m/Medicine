@@ -139,14 +139,13 @@
   .item:last-child{ border-bottom: none; }
   .item.done{ background: var(--done-bg); }
   .dot{
-    width: 14px;
-    height: 14px;
+    width: 12px;
+    height: 12px;
     border-radius: 50%;
     background: var(--accent);
-    border: 2px solid var(--ink);
     flex-shrink:0;
   }
-  .item.done .dot{ background: var(--done); border-color: var(--done); }
+  .item.done .dot{ background: var(--done); }
   .item-body{ flex:1; min-width:0; }
   .item-name{
     font-size: 18px;
@@ -169,7 +168,7 @@
     width: 30px;
     height: 30px;
     border-radius: 50%;
-    border: 2px solid var(--line);
+    border: 2px solid var(--ink);
     background: transparent;
     display:flex;
     align-items:center;
