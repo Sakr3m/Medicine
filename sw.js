@@ -1,4 +1,4 @@
-const CACHE = "promemoria-v4";
+const CACHE = "promemoria-v5";
 const ASSETS = ["./", "./index.html", "./manifest.json", "./icon-192.png", "./icon-512.png"];
 
 self.addEventListener("install", (e) => {
