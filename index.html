@@ -5,21 +5,21 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
 <title>Promemoria</title>
 <link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#F4F6F5">
+<meta name="theme-color" content="#12181A">
 <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <style>
   :root{
-    --bg: #F4F6F5;
-    --card: #FFFFFF;
-    --ink: #1E2A28;
-    --ink-soft: #5C6B68;
-    --line: #E3E8E6;
+    --bg: #12181A;
+    --card: #1B2224;
+    --ink: #F5F7F6;
+    --ink-soft: #8A9895;
+    --line: #2B3436;
     --done: #6E9C8C;
-    --done-bg: #EAF2EE;
-    --pending: #2E3B39;
-    --accent: #C97B63;
+    --done-bg: #1E2B26;
+    --pending: #F5F7F6;
+    --accent: #D9705A;
   }
   *{ box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html,body{ height:100%; }
@@ -28,16 +28,42 @@
     background: var(--bg);
     color: var(--ink);
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    padding-bottom: 40px;
     -webkit-font-smoothing: antialiased;
+    overscroll-behavior: none;
   }
-  .wrap{
-    max-width: 480px;
-    margin: 0 auto;
-    padding: env(safe-area-inset-top,0) 18px 0 18px;
+
+  .carousel{
+    display:flex;
+    overflow-x:auto;
+    overflow-y:hidden;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    height: 100dvh;
+    scrollbar-width: none;
   }
-  header{
-    padding: 28px 0 18px 0;
+  .carousel::-webkit-scrollbar{ display:none; }
+
+  .day-slide{
+    flex: 0 0 100%;
+    scroll-snap-align: center;
+    height: 100%;
+    overflow-y: auto;
+    padding: env(safe-area-inset-top,0) 18px 40px 18px;
+  }
+  .day-inner{ max-width: 480px; margin: 0 auto; }
+
+  header{ padding: 28px 0 18px 0; }
+  .badge-today{
+    display:inline-block;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .07em;
+    text-transform: uppercase;
+    background: var(--accent);
+    color: #12181A;
+    border-radius: 20px;
+    padding: 3px 10px;
+    margin-bottom: 8px;
   }
   .eyebrow{
     font-size: 12px;
@@ -48,11 +74,12 @@
     margin: 0 0 4px 0;
   }
   h1{
-    font-size: 26px;
+    font-size: 24px;
     margin: 0;
     font-weight: 700;
     letter-spacing: -0.01em;
     text-transform: capitalize;
+    color: var(--ink);
   }
   .progress{
     margin-top: 14px;
@@ -82,9 +109,7 @@
     text-align:right;
     font-variant-numeric: tabular-nums;
   }
-  .section{
-    margin-top: 26px;
-  }
+  .section{ margin-top: 26px; }
   .section-title{
     font-size: 13px;
     font-weight: 700;
@@ -151,17 +176,14 @@
   }
   .btn svg{ width:16px; height:16px; opacity:0; transition: opacity .15s ease; }
   .item.done .btn{ background: var(--done); border-color: var(--done); }
-  .item.done .btn svg{ opacity:1; stroke: white; }
+  .item.done .btn svg{ opacity:1; stroke: #12181A; }
   .empty{
     text-align:center;
     color: var(--ink-soft);
     font-size: 14px;
     padding: 40px 0 10px 0;
   }
-  footer{
-    margin-top: 34px;
-    text-align:center;
-  }
+  footer{ margin-top: 34px; text-align:center; }
   .reset{
     font-size: 12.5px;
     color: var(--ink-soft);
@@ -174,27 +196,14 @@
 </style>
 </head>
 <body>
-<div class="wrap">
-  <header>
-    <p class="eyebrow" id="dayCount"></p>
-    <h1 id="dateTitle"></h1>
-    <div class="progress">
-      <div class="progress-track"><div class="progress-fill" id="fill"></div></div>
-      <div class="progress-label" id="progressLabel">0/0</div>
-    </div>
-  </header>
 
-  <main id="sections"></main>
-
-  <footer>
-    <button class="reset" id="resetBtn">Azzera la giornata di oggi</button>
-  </footer>
-</div>
+<div class="carousel" id="carousel"></div>
 
 <script>
 // ---- Definizione farmaci ricorrenti ----
 const ANTIBIOTIC_START = "2026-08-02"; // giorno 1 di Cefixoral
 const ANTIBIOTIC_DAYS = 4;
+const RANGE = 30; // giorni prima/dopo oggi
 
 const SCHEDULE = {
   "Mattina": [
@@ -214,127 +223,157 @@ const SCHEDULE = {
 };
 
 // ---- Utility date ----
-function todayKey(){
-  const d = new Date();
+function dateKey(d){
   return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
 }
-function daysSince(dateStr){
-  const start = new Date(dateStr + "T00:00:00");
-  const now = new Date();
-  const a = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const b = new Date(start.getFullYear(), start.getMonth(), start.getDate());
-  return Math.round((a - b) / 86400000);
+function addDays(date, n){
+  const d = new Date(date);
+  d.setDate(d.getDate() + n);
+  return d;
+}
+function daysBetween(a, b){
+  const x = new Date(a.getFullYear(), a.getMonth(), a.getDate());
+  const y = new Date(b.getFullYear(), b.getMonth(), b.getDate());
+  return Math.round((x - y) / 86400000);
+}
+function formatDate(d){
+  return d.toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
 }
 
-const TODAY = todayKey();
-const cycleDay = daysSince(ANTIBIOTIC_START); // 0-indexed
-const antibioticActive = cycleDay >= 0 && cycleDay < ANTIBIOTIC_DAYS;
+const TODAY = new Date();
+TODAY.setHours(0,0,0,0);
+const ANTIBIOTIC_START_DATE = new Date(ANTIBIOTIC_START + "T00:00:00");
 
 // ---- Storage ----
-function loadState(){
+function loadState(key){
   try{
-    const raw = localStorage.getItem("promemoria:" + TODAY);
+    const raw = localStorage.getItem("promemoria:" + key);
     return raw ? JSON.parse(raw) : {};
   }catch(e){ return {}; }
 }
-function saveState(state){
-  try{
-    localStorage.setItem("promemoria:" + TODAY, JSON.stringify(state));
-  }catch(e){ console.error("Storage error", e); }
+function saveState(key, state){
+  try{ localStorage.setItem("promemoria:" + key, JSON.stringify(state)); }
+  catch(e){ console.error("Storage error", e); }
 }
 
-let state = loadState();
-
-// ---- Render ----
-const dateTitle = document.getElementById("dateTitle");
-const dayCount = document.getElementById("dayCount");
-const sectionsEl = document.getElementById("sections");
-const fillEl = document.getElementById("fill");
-const progressLabel = document.getElementById("progressLabel");
-
-function formatDate(){
-  const d = new Date();
-  const opts = { weekday: "long", day: "numeric", month: "long", year: "numeric" };
-  return d.toLocaleDateString("it-IT", opts);
-}
-
-function visibleItems(){
-  const flat = [];
+function visibleItemsFor(date){
+  const cycleDay = daysBetween(date, ANTIBIOTIC_START_DATE);
+  const antibioticActive = cycleDay >= 0 && cycleDay < ANTIBIOTIC_DAYS;
+  const bySection = {};
   for(const section in SCHEDULE){
-    for(const item of SCHEDULE[section]){
-      if(item.conditional && !antibioticActive) continue;
-      flat.push({ ...item, section });
+    bySection[section] = SCHEDULE[section].filter(i => !i.conditional || antibioticActive);
+  }
+  return { bySection, antibioticActive, cycleDay };
+}
+
+function buildSlide(date){
+  const key = dateKey(date);
+  const isToday = key === dateKey(TODAY);
+  let state = loadState(key);
+
+  const slide = document.createElement("div");
+  slide.className = "day-slide";
+  slide.dataset.key = key;
+
+  const inner = document.createElement("div");
+  inner.className = "day-inner";
+  slide.appendChild(inner);
+
+  function render(){
+    const { bySection, antibioticActive, cycleDay } = visibleItemsFor(date);
+    let done = 0, total = 0;
+
+    inner.innerHTML = "";
+
+    const head = document.createElement("header");
+    let badgeHtml = isToday ? '<div class="badge-today">Oggi</div>' : '';
+    let eyebrowText = antibioticActive ? ("Cefixoral · giorno " + (cycleDay+1) + " di " + ANTIBIOTIC_DAYS) : "Promemoria del giorno";
+    head.innerHTML = `
+      ${badgeHtml}
+      <p class="eyebrow">${eyebrowText}</p>
+      <h1>${formatDate(date)}</h1>
+      <div class="progress">
+        <div class="progress-track"><div class="progress-fill" id="fill-${key}"></div></div>
+        <div class="progress-label" id="label-${key}">0/0</div>
+      </div>
+    `;
+    inner.appendChild(head);
+
+    const main = document.createElement("main");
+    for(const section in bySection){
+      const items = bySection[section];
+      if(items.length === 0) continue;
+
+      const secDiv = document.createElement("div");
+      secDiv.className = "section";
+      secDiv.innerHTML = `<div class="section-title">${section}</div>`;
+      const card = document.createElement("div");
+      card.className = "card";
+
+      for(const item of items){
+        total++;
+        const isDone = !!state[item.id];
+        if(isDone) done++;
+        const row = document.createElement("div");
+        row.className = "item" + (isDone ? " done" : "");
+        row.innerHTML = `
+          <div class="dot"></div>
+          <div class="item-body">
+            <p class="item-name">${item.name}</p>
+            <div class="item-tag">${item.tag}</div>
+          </div>
+          <button class="btn" aria-label="Segna come fatto">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+          </button>
+        `;
+        row.addEventListener("click", () => {
+          state[item.id] = !state[item.id];
+          saveState(key, state);
+          render();
+        });
+        card.appendChild(row);
+      }
+      secDiv.appendChild(card);
+      main.appendChild(secDiv);
     }
-  }
-  return flat;
-}
-
-function render(){
-  dateTitle.textContent = formatDate();
-  if(antibioticActive){
-    dayCount.textContent = "Cefixoral · giorno " + (cycleDay+1) + " di " + ANTIBIOTIC_DAYS;
-  } else {
-    dayCount.textContent = "Promemoria del giorno";
-  }
-
-  sectionsEl.innerHTML = "";
-  const items = visibleItems();
-  let done = 0;
-
-  for(const section in SCHEDULE){
-    const items = SCHEDULE[section].filter(i => !i.conditional || antibioticActive);
-    if(items.length === 0) continue;
-
-    const secDiv = document.createElement("div");
-    secDiv.className = "section";
-    secDiv.innerHTML = `<div class="section-title">${section}</div>`;
-    const card = document.createElement("div");
-    card.className = "card";
-
-    for(const item of items){
-      const isDone = !!state[item.id];
-      if(isDone) done++;
-      const row = document.createElement("div");
-      row.className = "item" + (isDone ? " done" : "");
-      row.innerHTML = `
-        <div class="dot"></div>
-        <div class="item-body">
-          <p class="item-name">${item.name}</p>
-          <div class="item-tag">${item.tag}</div>
-        </div>
-        <button class="btn" aria-label="Segna come fatto">
-          <svg viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-        </button>
-      `;
-      row.addEventListener("click", () => toggle(item.id));
-      card.appendChild(row);
+    if(total === 0){
+      main.innerHTML = '<div class="empty">Nessun farmaco previsto oggi.</div>';
     }
-    secDiv.appendChild(card);
-    sectionsEl.appendChild(secDiv);
+    inner.appendChild(main);
+
+    const foot = document.createElement("footer");
+    const resetBtn = document.createElement("button");
+    resetBtn.className = "reset";
+    resetBtn.textContent = "Azzera questa giornata";
+    resetBtn.addEventListener("click", () => {
+      state = {};
+      saveState(key, state);
+      render();
+    });
+    foot.appendChild(resetBtn);
+    inner.appendChild(foot);
+
+    const fillEl = document.getElementById("fill-" + key);
+    const labelEl = document.getElementById("label-" + key);
+    if(fillEl) fillEl.style.width = total ? (done/total*100) + "%" : "0%";
+    if(labelEl) labelEl.textContent = done + "/" + total;
   }
 
-  const total = items.length;
-  progressLabel.textContent = done + "/" + total;
-  fillEl.style.width = total ? (done/total*100) + "%" : "0%";
-
-  if(total === 0){
-    sectionsEl.innerHTML = '<div class="empty">Nessun farmaco previsto oggi.</div>';
-  }
+  render();
+  return slide;
 }
 
-function toggle(id){
-  state[id] = !state[id];
-  saveState(state);
-  render();
+const carousel = document.getElementById("carousel");
+let todaySlide = null;
+for(let i = -RANGE; i <= RANGE; i++){
+  const date = addDays(TODAY, i);
+  const slide = buildSlide(date);
+  if(i === 0) todaySlide = slide;
+  carousel.appendChild(slide);
 }
-
-document.getElementById("resetBtn").addEventListener("click", () => {
-  state = {};
-  saveState(state);
-  render();
-});
-
-render();
+if(todaySlide){
+  todaySlide.scrollIntoView({ behavior: "instant", inline: "center" });
+}
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
