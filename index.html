@@ -46,8 +46,10 @@
   .day-slide{
     flex: 0 0 100%;
     scroll-snap-align: center;
+    scroll-snap-stop: always;
     height: 100%;
     overflow-y: auto;
+    overscroll-behavior-x: contain;
     padding: env(safe-area-inset-top,0) 18px 40px 18px;
   }
   .day-inner{ max-width: 480px; margin: 0 auto; }
@@ -128,8 +130,8 @@
   .item{
     display:flex;
     align-items:center;
-    gap: 14px;
-    padding: 16px;
+    gap: 12px;
+    padding: 13px 14px;
     border-bottom: 1px solid var(--line);
     background: var(--card);
     transition: background .2s ease;
@@ -137,16 +139,17 @@
   .item:last-child{ border-bottom: none; }
   .item.done{ background: var(--done-bg); }
   .dot{
-    width: 12px;
-    height: 12px;
+    width: 14px;
+    height: 14px;
     border-radius: 50%;
     background: var(--accent);
+    border: 2px solid var(--ink);
     flex-shrink:0;
   }
-  .item.done .dot{ background: var(--done); }
+  .item.done .dot{ background: var(--done); border-color: var(--done); }
   .item-body{ flex:1; min-width:0; }
   .item-name{
-    font-size: 16px;
+    font-size: 18px;
     font-weight: 600;
     margin: 0;
     color: var(--pending);
@@ -157,7 +160,7 @@
     text-decoration-thickness: 1.5px;
   }
   .item-tag{
-    font-size: 12.5px;
+    font-size: 13.5px;
     color: var(--ink-soft);
     margin-top: 2px;
   }
@@ -252,9 +255,10 @@ const ANTIBIOTIC_START = "2026-08-02"; // giorno 1 di Cefixoral
 const ANTIBIOTIC_DAYS = 4;
 const RANGE = 30; // giorni prima/dopo oggi
 
+const ANTIBIOTIC_ITEM = { id: "cefixoral", name: "Cefixoral", tag: "Antibiotico" };
+
 const SCHEDULE = {
   "Mattina": [
-    { id: "cefixoral", name: "Cefixoral", tag: "Antibiotico", conditional: true },
     { id: "tareg", name: "Tareg Valsartan", tag: "Pressione" },
     { id: "forxiga", name: "Forxiga", tag: "Diuretico" },
     { id: "lasix", name: "Lasix", tag: "Diuretico" },
@@ -306,11 +310,7 @@ function saveState(key, state){
 function visibleItemsFor(date){
   const cycleDay = daysBetween(date, ANTIBIOTIC_START_DATE);
   const antibioticActive = cycleDay >= 0 && cycleDay < ANTIBIOTIC_DAYS;
-  const bySection = {};
-  for(const section in SCHEDULE){
-    bySection[section] = SCHEDULE[section].filter(i => !i.conditional || antibioticActive);
-  }
-  return { bySection, antibioticActive, cycleDay };
+  return { bySection: SCHEDULE, antibioticActive, cycleDay };
 }
 
 function buildSlide(date){
@@ -334,10 +334,9 @@ function buildSlide(date){
 
     const head = document.createElement("header");
     let badgeHtml = isToday ? '<div class="badge-today">Oggi</div>' : '';
-    let eyebrowText = antibioticActive ? ("Cefixoral · giorno " + (cycleDay+1) + " di " + ANTIBIOTIC_DAYS) : "Promemoria del giorno";
     head.innerHTML = `
       ${badgeHtml}
-      <p class="eyebrow">${eyebrowText}</p>
+      <p class="eyebrow">Promemoria del giorno</p>
       <h1>${formatDate(date)}</h1>
       <div class="progress">
         <div class="progress-track"><div class="progress-fill" id="fill-${key}"></div></div>
@@ -347,6 +346,51 @@ function buildSlide(date){
     inner.appendChild(head);
 
     const main = document.createElement("main");
+
+    function buildRow(item){
+      total++;
+      const isDone = !!state[item.id];
+      if(isDone) done++;
+      const row = document.createElement("div");
+      row.className = "item" + (isDone ? " done" : "");
+      row.innerHTML = `
+        <div class="dot"></div>
+        <div class="item-body">
+          <p class="item-name">${item.name}</p>
+          <div class="item-tag">${item.tag}</div>
+        </div>
+        <button class="btn" aria-label="Segna come fatto">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+        </button>
+      `;
+      row.addEventListener("click", () => {
+        const currentlyDone = !!state[item.id];
+        if(currentlyDone){
+          askConfirm(item.name, () => {
+            state[item.id] = false;
+            saveState(key, state);
+            render();
+          });
+        } else {
+          state[item.id] = true;
+          saveState(key, state);
+          render();
+        }
+      });
+      return row;
+    }
+
+    if(antibioticActive){
+      const abSection = document.createElement("div");
+      abSection.className = "section";
+      abSection.innerHTML = `<div class="section-title">Antibiotico · giorno ${cycleDay+1} di ${ANTIBIOTIC_DAYS}</div>`;
+      const abCard = document.createElement("div");
+      abCard.className = "card";
+      abCard.appendChild(buildRow(ANTIBIOTIC_ITEM));
+      abSection.appendChild(abCard);
+      main.appendChild(abSection);
+    }
+
     for(const section in bySection){
       const items = bySection[section];
       if(items.length === 0) continue;
@@ -358,36 +402,7 @@ function buildSlide(date){
       card.className = "card";
 
       for(const item of items){
-        total++;
-        const isDone = !!state[item.id];
-        if(isDone) done++;
-        const row = document.createElement("div");
-        row.className = "item" + (isDone ? " done" : "");
-        row.innerHTML = `
-          <div class="dot"></div>
-          <div class="item-body">
-            <p class="item-name">${item.name}</p>
-            <div class="item-tag">${item.tag}</div>
-          </div>
-          <button class="btn" aria-label="Segna come fatto">
-            <svg viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-          </button>
-        `;
-        row.addEventListener("click", () => {
-          const currentlyDone = !!state[item.id];
-          if(currentlyDone){
-            askConfirm(item.name, () => {
-              state[item.id] = false;
-              saveState(key, state);
-              render();
-            });
-          } else {
-            state[item.id] = true;
-            saveState(key, state);
-            render();
-          }
-        });
-        card.appendChild(row);
+        card.appendChild(buildRow(item));
       }
       secDiv.appendChild(card);
       main.appendChild(secDiv);
